@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-slate-950 text-fg font-sans;
+  background-image: radial-gradient(circle at 0 0, rgba(26, 36, 48, 0.5), transparent 35%),
+    linear-gradient(180deg, #070b0f 0%, #0a1016 100%);
+}
+
+a {
+  @apply text-sky-300 hover:text-sky-200;
+}
+
+table {
+  @apply w-full border-separate border-spacing-0 text-sm;
+}
+
+th,
+td {
+  @apply border-b border-line px-3 py-2.5 text-left align-top;
+}
+
+th {
+  @apply bg-panelMuted/70 text-xs font-medium uppercase tracking-wide text-fgMuted;
+}
+
+td {
+  @apply break-words;
+}
+
+tbody tr {
+  @apply transition-colors;
+}
+
+tbody tr:hover td {
+  @apply bg-slate-900/40;
+}

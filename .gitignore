@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log*
+.yarn
+.pnpm-store
+.DS_Store
+.env
+.env.local
+.env.*.local
+coverage
+dist
+.next
+playwright-report
+test-results
