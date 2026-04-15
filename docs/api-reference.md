@@ -8,6 +8,7 @@
 ## Health and Metrics
 
 - `GET /health`: service heartbeat and uptime
+- `GET /api/v1/health`: versioned heartbeat endpoint
 - `GET /metrics`: in-memory operational counters
 
 ## Core Read Endpoints
@@ -89,3 +90,9 @@ Response:
 3. Event is appended to `event_log`.
 4. Deterministic side effects update transfer/inspection/evidence/sync tables.
 5. Projection reducer updates `asset_projection`.
+
+## Non-Goals
+
+- Not a full public API product surface.
+- Not version-negotiated backward compatibility guarantees.
+- Not an implementation of confidential endpoint contracts.

@@ -1,8 +1,15 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { CopyValue } from "../../../components/copy-value";
+import { EventInspector } from "../../../components/event-inspector";
 import { StatusBadge } from "../../../components/status-badge";
 import { fetchJson } from "../../../lib/api";
-import { formatCodeLabel, formatTimestampWithAge, shortId } from "../../../lib/format";
+import {
+  formatCodeLabel,
+  formatTimestampWithAge,
+  shortId,
+  summarizeEventPayload
+} from "../../../lib/format";
 
 type SyncBatchDetailsResponse = {
   data: {
@@ -25,13 +32,17 @@ type SyncBatchDetailsResponse = {
       asset_id: string | null;
       site_id: string;
       occurred_at: string;
+      ingested_at: string;
       source_site_event_id: string | null;
       payload: Record<string, unknown>;
     }>;
     replayDiagnostics: {
       idempotencyModel: string;
+      deduplicatedEventCount: number;
       rejectionReasons: string[];
     };
+    affectedAssets: string[];
+    affectedEventTypes: string[];
   };
 };
 
@@ -55,7 +66,9 @@ export default async function SyncBatchDetailPage({
     <div className="space-y-4">
       <section className="rounded-lg border border-line bg-panel p-4">
         <h2 className="mb-1 text-lg font-semibold">Sync Batch Detail</h2>
-        <p className="mb-3 text-xs text-fgMuted">Replay batch execution details, ingestion outcomes, and idempotency handling context.</p>
+        <p className="mb-3 text-xs text-fgMuted">
+          Replay batch execution details, ingestion outcomes, and idempotency handling context.
+        </p>
         <div className="grid gap-3 md:grid-cols-4">
           <div className="rounded border border-line bg-panelMuted p-3">
             <div className="text-xs text-fgMuted">Batch ID</div>
@@ -63,11 +76,17 @@ export default async function SyncBatchDetailPage({
               <span className="font-mono text-xs">{shortId(batch.id, 14)}</span>
               <CopyValue value={batch.id} label="sync batch id" />
             </div>
-            <div className="mt-2"><StatusBadge value={batch.status} /></div>
+            <div className="mt-2">
+              <StatusBadge value={batch.status} />
+            </div>
           </div>
           <div className="rounded border border-line bg-panelMuted p-3">
             <div className="text-xs text-fgMuted">Source Site</div>
-            <div className="font-medium">{details.data.site?.code ?? shortId(batch.siteId, 8)}</div>
+            <div className="flex items-center gap-2">
+              <Link href={`/sites/${batch.siteId}`} className="font-medium text-fg">
+                {details.data.site?.code ?? shortId(batch.siteId, 8)}
+              </Link>
+            </div>
             <div className="text-xs text-fgMuted">{details.data.site?.name ?? batch.siteId}</div>
           </div>
           <div className="rounded border border-line bg-panelMuted p-3">
@@ -81,6 +100,7 @@ export default async function SyncBatchDetailPage({
             <div className="text-sm">Queued {batch.queuedEventCount}</div>
             <div className="text-sm">Accepted {batch.acceptedEventCount}</div>
             <div className="text-sm">Rejected {batch.rejectedEventCount}</div>
+            <div className="text-sm">Deduplicated {details.data.replayDiagnostics.deduplicatedEventCount}</div>
           </div>
         </div>
       </section>
@@ -88,6 +108,24 @@ export default async function SyncBatchDetailPage({
       <section className="rounded-lg border border-line bg-panel p-4">
         <h3 className="mb-2 text-base font-semibold">Replay Diagnostics</h3>
         <p className="text-sm text-fgMuted">{details.data.replayDiagnostics.idempotencyModel}</p>
+        <div className="mt-2 text-xs text-fgMuted">
+          Affected assets {details.data.affectedAssets.length} | event types{" "}
+          {details.data.affectedEventTypes.length}
+        </div>
+        {details.data.affectedAssets.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {details.data.affectedAssets.map((assetId) => (
+              <Link
+                key={assetId}
+                href={`/assets/${assetId}`}
+                className="rounded border border-line px-2 py-0.5 font-mono text-xs text-fg"
+                title={assetId}
+              >
+                {shortId(assetId, 10)}
+              </Link>
+            ))}
+          </div>
+        ) : null}
         {details.data.replayDiagnostics.rejectionReasons.length > 0 ? (
           <ul className="mt-2 list-disc pl-5 text-sm text-fgMuted">
             {details.data.replayDiagnostics.rejectionReasons.map((reason) => (
@@ -101,6 +139,9 @@ export default async function SyncBatchDetailPage({
 
       <section className="rounded-lg border border-line bg-panel p-4">
         <h3 className="mb-2 text-base font-semibold">Replayed Events</h3>
+        <p className="mb-3 text-xs text-fgMuted">
+          Use <span className="font-medium">Inspect</span> on any row to view normalized payload fields.
+        </p>
         <div className="overflow-x-auto">
           <table>
             <thead>
@@ -109,7 +150,10 @@ export default async function SyncBatchDetailPage({
                 <th>Event</th>
                 <th>Asset</th>
                 <th>Occurred</th>
+                <th>Accepted</th>
                 <th>Source Event ID</th>
+                <th>Payload Summary</th>
+                <th>Inspect</th>
               </tr>
             </thead>
             <tbody>
@@ -117,9 +161,30 @@ export default async function SyncBatchDetailPage({
                 <tr key={event.id}>
                   <td>{event.sequence_number}</td>
                   <td>{formatCodeLabel(event.event_type)}</td>
-                  <td className="font-mono text-xs">{shortId(event.asset_id, 10)}</td>
+                  <td className="font-mono text-xs" title={event.asset_id ?? undefined}>
+                    {event.asset_id ? (
+                      <Link href={`/assets/${event.asset_id}`} className="text-fg">
+                        {shortId(event.asset_id, 10)}
+                      </Link>
+                    ) : (
+                      "-"
+                    )}
+                  </td>
                   <td>{formatTimestampWithAge(event.occurred_at)}</td>
+                  <td>{formatTimestampWithAge(event.ingested_at)}</td>
                   <td className="font-mono text-xs">{event.source_site_event_id ?? "-"}</td>
+                  <td>{summarizeEventPayload(event.event_type, event.payload)}</td>
+                  <td>
+                    <EventInspector
+                      eventType={event.event_type}
+                      sequenceNumber={event.sequence_number}
+                      siteId={event.site_id}
+                      sourceSiteEventId={event.source_site_event_id}
+                      occurredAt={event.occurred_at}
+                      acceptedAt={event.ingested_at}
+                      payload={event.payload}
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

@@ -3,21 +3,102 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
+  --app-bg-start: #eef3f9;
+  --app-bg-end: #e3ebf4;
+  --app-bg-bloom-a: rgba(99, 138, 176, 0.14);
+  --app-bg-bloom-b: rgba(99, 138, 176, 0.08);
+  --app-fg: #162739;
+  --app-fg-muted: #48617a;
+  --app-link: #0a5f95;
+  --app-link-hover: #084e79;
+  --app-line: #c3d1e0;
+  --app-panel: #ffffff;
+  --app-panel-muted: #eef4fa;
+  --app-row-base: #ffffff;
+  --app-row-hover: #e7f1fb;
+  --app-row-alt: #e8eff7;
+  --app-row-selected: #d1e4f8;
+  --app-shadow: 0 10px 30px rgba(26, 43, 64, 0.09);
+  --app-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --app-focus-ring: rgb(14 165 233 / 70%);
+  --app-focus-offset: #f1f5f9;
+  --app-nav-bg: #ffffff;
+  --app-nav-hover: #edf5fd;
+  --app-nav-active-bg: #0a5f95;
+  --app-nav-active-fg: #ffffff;
+  --app-button-bg: #0a5f95;
+  --app-button-border: #0a5f95;
+  --app-button-hover: #084e79;
+  --app-subtle-hover: #f8fafc;
+}
+
+:root.theme-dark {
   color-scheme: dark;
+  --app-bg-start: #0d1622;
+  --app-bg-end: #131f2d;
+  --app-bg-bloom-a: rgba(32, 90, 135, 0.18);
+  --app-bg-bloom-b: rgba(25, 64, 101, 0.13);
+  --app-fg: #e6eef8;
+  --app-fg-muted: #a8bacf;
+  --app-link: #86c6f4;
+  --app-link-hover: #a8d9ff;
+  --app-line: #375069;
+  --app-panel: #162435;
+  --app-panel-muted: #1c2f45;
+  --app-row-base: #162435;
+  --app-row-hover: #213a52;
+  --app-row-alt: #1f3449;
+  --app-row-selected: #2a4866;
+  --app-shadow: 0 14px 34px rgba(5, 10, 17, 0.3);
+  --app-inset-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --app-focus-ring: rgb(56 189 248 / 65%);
+  --app-focus-offset: #0d1622;
+  --app-nav-bg: #162435;
+  --app-nav-hover: #20384f;
+  --app-nav-active-bg: #2f7fb9;
+  --app-nav-active-fg: #eaf6ff;
+  --app-button-bg: #2f7fb9;
+  --app-button-border: #2f7fb9;
+  --app-button-hover: #3f93d1;
+  --app-subtle-hover: #20384f;
 }
 
 body {
-  @apply bg-slate-950 text-fg font-sans;
-  background-image: radial-gradient(circle at 0 0, rgba(26, 36, 48, 0.5), transparent 35%),
-    linear-gradient(180deg, #070b0f 0%, #0a1016 100%);
+  @apply font-sans antialiased;
+  min-height: 100%;
+  color: var(--app-fg);
+  background-image: radial-gradient(circle at 15% -5%, var(--app-bg-bloom-a), transparent 35%),
+    radial-gradient(circle at 90% 0%, var(--app-bg-bloom-b), transparent 28%),
+    linear-gradient(180deg, var(--app-bg-start) 0%, var(--app-bg-end) 100%);
+  letter-spacing: 0.005em;
+  line-height: 1.45;
 }
 
 a {
-  @apply text-sky-300 hover:text-sky-200;
+  @apply no-underline transition-colors duration-150;
+  color: var(--app-link);
+  text-underline-offset: 0.15rem;
+}
+
+a:hover {
+  color: var(--app-link-hover);
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  @apply outline-none ring-2 ring-offset-2;
+  --tw-ring-color: var(--app-focus-ring);
+  --tw-ring-offset-color: var(--app-focus-offset);
 }
 
 table {
   @apply w-full border-separate border-spacing-0 text-sm;
+  border-radius: 0.5rem;
+  overflow: hidden;
 }
 
 th,
@@ -26,11 +107,15 @@ td {
 }
 
 th {
-  @apply bg-panelMuted/70 text-xs font-medium uppercase tracking-wide text-fgMuted;
+  @apply bg-panelMuted text-xs font-semibold tracking-wide text-fgMuted;
 }
 
 td {
   @apply break-words;
+}
+
+tbody tr:nth-child(odd) td {
+  background-color: var(--app-row-base);
 }
 
 tbody tr {
@@ -38,5 +123,226 @@ tbody tr {
 }
 
 tbody tr:hover td {
-  @apply bg-slate-900/40;
+  background-color: var(--app-row-hover);
+}
+
+tbody tr:nth-child(even) td {
+  background-color: var(--app-row-alt);
+}
+
+.bg-panel {
+  background-color: var(--app-panel);
+  box-shadow: var(--app-shadow);
+}
+
+.bg-panelMuted {
+  background-color: var(--app-panel-muted);
+  box-shadow: var(--app-inset-shadow);
+}
+
+.border-line {
+  border-color: var(--app-line);
+}
+
+.theme-dark .border-line\/40 {
+  border-color: rgb(42 65 88 / 40%);
+}
+
+.text-fg {
+  color: var(--app-fg);
+}
+
+.text-fgMuted {
+  color: var(--app-fg-muted);
+}
+
+.theme-dark .border-sky-600\/70 {
+  border-color: rgb(56 189 248 / 70%);
+}
+
+.theme-dark .text-sky-700 {
+  color: rgb(125 211 252);
+}
+
+@layer components {
+  .app-card {
+    @apply rounded-xl border border-line bg-panel p-5;
+  }
+
+  .app-page-header {
+    @apply app-card;
+  }
+
+  .app-page-title {
+    @apply text-[1.35rem] font-semibold tracking-tight text-fg;
+  }
+
+  .app-page-subtitle {
+    @apply mt-1 text-sm text-fgMuted;
+  }
+
+  .app-page-meta {
+    @apply mt-2 text-xs text-fgMuted;
+  }
+
+  .app-summary-chip {
+    @apply rounded-lg border border-line bg-panelMuted px-3 py-2;
+  }
+
+  .app-summary-label {
+    @apply text-xs text-fgMuted;
+  }
+
+  .app-summary-value {
+    @apply text-lg font-semibold text-fg;
+  }
+
+  .app-control {
+    @apply rounded border border-line px-2.5 py-1.5 text-sm text-fg;
+    background-color: var(--app-panel);
+  }
+
+  .app-textarea {
+    @apply rounded border border-line px-2.5 py-1.5 text-sm text-fg;
+    background-color: var(--app-panel);
+  }
+
+  .app-button {
+    @apply rounded border px-3 py-1.5 text-sm font-medium text-white transition-colors;
+    border-color: var(--app-button-border);
+    background-color: var(--app-button-bg);
+  }
+
+  .app-button:hover {
+    background-color: var(--app-button-hover);
+  }
+
+  .app-button-secondary {
+    @apply rounded border border-line px-3 py-1.5 text-sm text-fg transition-colors;
+    background-color: var(--app-panel);
+  }
+
+  .app-button-secondary:hover {
+    background-color: var(--app-subtle-hover);
+  }
+
+  .app-pill-action {
+    @apply rounded-md border border-line px-2.5 py-1 text-[11px] font-medium text-fgMuted transition-colors;
+    background-color: var(--app-panel);
+  }
+
+  .app-pill-action:hover {
+    border-color: var(--app-link);
+    color: var(--app-link);
+  }
+
+  .app-pill-action-selected {
+    border-color: var(--app-link);
+    background-color: var(--app-row-selected);
+    color: var(--app-link);
+  }
+
+  .app-nav-link {
+    @apply rounded-md border border-line px-3.5 py-1.5 text-sm font-semibold no-underline transition-colors;
+    background-color: var(--app-nav-bg);
+    color: var(--app-fg);
+  }
+
+  .app-nav-link:hover {
+    background-color: var(--app-nav-hover);
+  }
+
+  .app-nav-link-active {
+    border-color: var(--app-nav-active-bg);
+    background-color: var(--app-nav-active-bg);
+    color: var(--app-nav-active-fg);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+  }
+
+  .app-kpi-card {
+    @apply rounded-xl border border-line bg-panel p-5 transition;
+  }
+
+  .app-kpi-card:hover {
+    transform: translateY(-2px);
+    background-color: var(--app-panel-muted);
+  }
+
+  .app-theme-toggle {
+    @apply inline-flex rounded-md border border-line p-1;
+    background-color: var(--app-panel-muted);
+  }
+
+  .app-theme-choice {
+    @apply rounded px-2.5 py-1 text-xs font-medium transition-colors;
+    color: var(--app-fg-muted);
+  }
+
+  .app-theme-choice:hover {
+    background-color: var(--app-subtle-hover);
+    color: var(--app-fg);
+  }
+
+  .app-theme-choice-active {
+    background-color: var(--app-panel);
+    color: var(--app-fg);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.16);
+  }
+
+  .app-section-title {
+    @apply text-base font-semibold text-fg;
+  }
+
+  .app-section-subtitle {
+    @apply mt-1 text-sm text-fgMuted;
+  }
+
+  .app-stream-card {
+    @apply rounded-lg border border-line bg-panelMuted p-3;
+  }
+
+  .app-scroll-panel {
+    height: 32rem;
+    overflow-y: auto;
+    padding-right: 0.25rem;
+  }
+
+  .app-scroll-panel::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .app-scroll-panel::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  .app-scroll-panel::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background-color: var(--app-line);
+  }
+
+  .app-row-selected td {
+    background-color: var(--app-row-selected) !important;
+    box-shadow: inset 0 1px 0 rgba(10, 95, 149, 0.18), inset 0 -1px 0 rgba(10, 95, 149, 0.18);
+  }
+
+  .app-row-selected td:first-child {
+    box-shadow: inset 4px 0 0 var(--app-link), inset 0 1px 0 rgba(10, 95, 149, 0.18),
+      inset 0 -1px 0 rgba(10, 95, 149, 0.18);
+  }
+
+  .app-selection-panel {
+    @apply self-start rounded-xl border border-line bg-panel p-4 xl:sticky xl:top-6;
+  }
+
+  .app-selection-title {
+    @apply text-sm font-semibold text-fg;
+  }
+
+  .app-selection-label {
+    @apply text-xs text-fgMuted;
+  }
+
+  .app-selection-value {
+    @apply text-sm text-fg;
+  }
 }

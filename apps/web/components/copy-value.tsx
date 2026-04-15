@@ -25,7 +25,7 @@ export function CopyValue({
     <button
       type="button"
       onClick={onCopy}
-      className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-fgMuted hover:text-fg"
+      className="app-pill-action"
       title={value}
       aria-label={`Copy ${label}`}
     >

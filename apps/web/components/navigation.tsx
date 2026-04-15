@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard" },
@@ -10,10 +13,17 @@ const links = [
 ];
 
 export function Navigation() {
+  const pathname = usePathname();
+
   return (
-    <nav className="mt-4 flex flex-wrap gap-4 text-sm">
+    <nav className="mt-4 flex flex-wrap gap-2 text-sm">
       {links.map((link) => (
-        <Link key={link.href} href={link.href} className="rounded border border-line px-3 py-1.5">
+        <Link
+          key={link.href}
+          href={link.href}
+          className={`app-nav-link ${pathname === link.href ? "app-nav-link-active" : ""}`}
+          aria-current={pathname === link.href ? "page" : undefined}
+        >
           {link.label}
         </Link>
       ))}

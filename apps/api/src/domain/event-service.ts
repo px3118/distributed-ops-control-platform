@@ -164,6 +164,15 @@ async function applyEventSideEffects(
       break;
     }
     case "site_sync_completed": {
+      const replaySummary = JSON.stringify({
+        idempotencyModel:
+          "Replay uses (site_id, source_site_event_id) deduplication. Duplicate events are treated as accepted without duplicate side effects.",
+        deduplicatedEventCount: Number(event.payload.deduplicatedEventCount ?? 0),
+        rejectionReasons: Array.isArray(event.payload.rejectionReasons)
+          ? event.payload.rejectionReasons
+          : []
+      });
+
       await db
         .update(syncBatches)
         .set({
@@ -171,7 +180,7 @@ async function applyEventSideEffects(
           completedAt: occurredAt,
           acceptedEventCount: Number(event.payload.acceptedEventCount),
           rejectedEventCount: Number(event.payload.rejectedEventCount),
-          replayResultSummary: `accepted=${String(event.payload.acceptedEventCount)} rejected=${String(event.payload.rejectedEventCount)}`
+          replayResultSummary: replaySummary
         })
         .where(eq(syncBatches.id, String(event.payload.syncBatchId)));
 
@@ -385,6 +394,8 @@ export async function ingestSyncReplay(
   syncBatchId: string;
   acceptedEventCount: number;
   rejectedEventCount: number;
+  deduplicatedEventCount: number;
+  rejectionReasons: string[];
 }> {
   const startedAt = new Date();
   await ingestEvent(db, {
@@ -402,6 +413,8 @@ export async function ingestSyncReplay(
 
   let acceptedEventCount = 0;
   let rejectedEventCount = 0;
+  let deduplicatedEventCount = 0;
+  const rejectionReasons: string[] = [];
 
   for (let index = 0; index < input.events.length; index += 1) {
     const event = input.events[index];
@@ -416,12 +429,17 @@ export async function ingestSyncReplay(
         { syncBatchId: input.syncBatchId }
       );
       if (result.deduplicated) {
+        deduplicatedEventCount += 1;
         acceptedEventCount += 1;
       } else {
         acceptedEventCount += 1;
       }
-    } catch {
+    } catch (error) {
       rejectedEventCount += 1;
+      const message = error instanceof Error ? error.message : "unknown replay rejection";
+      if (!rejectionReasons.includes(message)) {
+        rejectionReasons.push(message);
+      }
     }
   }
 
@@ -435,7 +453,9 @@ export async function ingestSyncReplay(
     payload: {
       syncBatchId: input.syncBatchId,
       acceptedEventCount,
-      rejectedEventCount
+      rejectedEventCount,
+      deduplicatedEventCount,
+      rejectionReasons: rejectionReasons.slice(0, 5)
     }
   });
 
@@ -445,7 +465,9 @@ export async function ingestSyncReplay(
   return {
     syncBatchId: input.syncBatchId,
     acceptedEventCount,
-    rejectedEventCount
+    rejectedEventCount,
+    deduplicatedEventCount,
+    rejectionReasons
   };
 }
 

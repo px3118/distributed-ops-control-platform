@@ -30,6 +30,25 @@ Reconciliation handles operational exceptions detected automatically or opened m
 4. Operators resolve cases with explicit summary and actor.
 5. Resolution emits `reconciliation_resolved` event.
 
+## Reconciliation Lifecycle Diagram
+
+```mermaid
+stateDiagram-v2
+  [*] --> AlertOpen: divergence_detected
+  AlertOpen --> CaseOpen: high severity auto-open or manual open
+  CaseOpen --> Investigation: operator reviews timeline + projection
+  Investigation --> CaseResolved: operator resolves with summary
+  CaseResolved --> EventWritten: reconciliation_resolved appended
+  EventWritten --> [*]
+```
+
+## Alert vs Case vs Projection vs Event
+
+- **Alert**: machine-detected divergence signal, keyed by rule code and severity.
+- **Case**: operator-owned investigation record tied to an alert or manual concern.
+- **Projection**: current derived state for fast operations, not the source of truth.
+- **Accepted event**: immutable record in `event_log` that drives side effects and projection.
+
 ## UI Surfaces
 
 - list alerts by severity and rule code
@@ -42,3 +61,9 @@ Reconciliation handles operational exceptions detected automatically or opened m
 - Cases are auditable and timestamped.
 - Case resolution never deletes source alerts/events.
 - Event timeline remains immutable.
+
+## Non-Goals
+
+- Not a full case-management platform with escalation trees.
+- Not a complete human workflow/approval engine.
+- Not a reconstruction of protected operator playbooks.

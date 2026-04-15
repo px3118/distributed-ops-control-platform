@@ -4,85 +4,212 @@ A distributed operations control system that models how real-world systems drift
 
 This project demonstrates event-driven state, projection consistency, and operator workflows for resolving inconsistencies across distributed sites.
 
-Clean-room reference implementation of an internal operations platform for tracking serialized assets across distributed sites.  
-The system is designed to show event integrity, sync drift, and reconciliation controls under realistic operational conditions.
+Clean-room, public-safe reference implementation of an internal operations platform for serialized assets.  
+It is intentionally built to show distributed state integrity, replay behavior, and reconciliation controls beyond CRUD.
 
 ## Clean-Room Statement
 
-This repository is original and public-safe. It intentionally avoids proprietary schemas, internal terminology, customer data, and protected workflows.
+This repository is original and public-safe.  
+It intentionally avoids proprietary schemas, protected terminology, customer data, and confidential workflows.
+
+## Start Here (5 Minutes)
+
+1. Open `http://localhost:3000` and review dashboard status, policy thresholds, and simulation state.
+2. Open an asset detail page to inspect projection state vs accepted event sequence.
+3. Open a reconciliation case detail page to inspect source alert, linked entities, and resolution writeback.
+4. Open a sync batch detail page to inspect accepted/rejected/deduplicated replay outcomes.
+5. Open a transfer detail page to inspect lifecycle, overdue state, and linked event chain.
+6. In any timeline table, click `Inspect` to view normalized event payload fields.
+
+## Hero Detail Surface
+
+The strongest single depth view is **Asset Projection Detail** (`/assets/:assetId`): it shows
+current projected state, projection-vs-stream sequence alignment, accepted event chain, linked
+transfers, linked reconciliation cases, and linked sync batches in one operator surface.
+
+## Screenshots
+
+Use these four repository-safe screenshot files (in this order):
+
+- `docs/images/dashboard-view.png`
+- `docs/images/asset-detail-view.png`
+- `docs/images/reconciliation-case-detail-view.png`
+- `docs/images/sync-batch-detail-view.png`
+
+See [docs/images/README.md](docs/images/README.md) for capture guidance.
+
+## Architecture At A Glance
+
+```mermaid
+flowchart LR
+  Sites[Distributed Sites] -->|events / replay| API[Fastify API]
+  API --> Ledger[(event_log)]
+  API --> Projection[Projection Updater]
+  Projection --> AssetState[(asset_projection)]
+  Ledger --> Scanner[Divergence Scanner]
+  Scanner --> Alerts[(alert)]
+  Alerts --> Cases[(reconciliation_case)]
+  OpsUI[Operations UI] -->|read + resolve| API
+  API --> Cases
+```
 
 ## What This System Demonstrates
 
-- Append-only event ledger (`event_log`) as the system record
-- Deterministic current-state projection (`asset_projection`)
-- Idempotent event ingestion and sync replay
-- Divergence detection for transfer, evidence, staleness, and projection integrity
-- Reconciliation workflow with auditable open/resolve actions
-- Operator-focused UI for investigation and state visibility
+- Append-only operational ledger (`event_log`)
+- Deterministic projection model (`asset_projection`)
+- Idempotent replay (`site_id` + `source_site_event_id`)
+- Sync batch outcomes with accepted/rejected/deduplicated behavior
+- Divergence detection for transfer confirmation, conflicting observations, evidence gaps, stale sync, and projection lag
+- Reconciliation as explicit operator workflow with event-backed resolution
+
+## High-Value Test Signals
+
+- replay idempotency behavior
+- projection update correctness
+- stale-site detection
+- transfer confirmation overdue detection
+- inspection evidence-gap detection
+- reconciliation resolution event behavior
+
+## Why This Is Not a CRUD App
+
+- Append-only event stream is the system of record.
+- Deterministic projections materialize current state.
+- Replay and deduplication are explicit operational paths.
+- Reconciliation is an operator control loop, not an afterthought.
+
+## What Is Intentionally Simplified
+
+- This is a deterministic simulator, not true distributed infrastructure.
+- Evidence metadata is modeled; binary evidence storage is out of scope.
+- Authorization and permissions are intentionally minimal.
+- External integrations are omitted to keep event/replay behavior inspectable.
 
 ## Concrete Scenario Walkthrough
 
-Three sites (`NORTH`, `CENTRAL`, `COASTAL`) manage the same asset fleet.
+Seeded demo data creates a realistic mixed state:
 
-1. Asset A transfer from `NORTH` to `CENTRAL` is initiated, moved, received, and confirmed.
-2. Asset B transfer from `CENTRAL` to `COASTAL` is initiated but never confirmed.
-3. Asset B is later observed at two sites, creating a conflicting observation condition.
-4. Asset C inspection is recorded without evidence metadata.
-5. `COASTAL` replays an offline queue through a sync batch.
-6. `CENTRAL` remains stale past sync policy threshold.
-7. Divergence scan opens alerts and auto-opens high-severity reconciliation cases.
-
-The UI exposes this state through dashboard, assets, transfer timeline, reconciliation workbench, and sync batch views.
+1. 12 assets are registered across 3 sites (`NORTH`, `CENTRAL`, `COASTAL`).
+2. 10 transfer orders are created; several complete, two remain unconfirmed past policy threshold.
+3. Two assets are observed at multiple sites, creating conflicting observation alerts.
+4. Multiple inspections are recorded; two intentionally have no evidence metadata.
+5. One site replay batch is ingested with a duplicate source event to show idempotent acceptance.
+6. One site remains stale beyond threshold.
+7. One projection is intentionally set behind stream sequence to demonstrate projection integrity detection.
+8. Divergence scan writes alerts and opens reconciliation cases for high-severity findings.
 
 ## Why Reconciliation Exists
 
-Distributed operations drift even with strong process controls:
+Distributed systems drift because:
 
-- Sites can disconnect and replay later.
-- Transfer and receipt timing can diverge across teams.
-- Evidence can be missing at initial inspection time.
-- Projections can lag accepted events during transient failures.
+- Sites can operate offline and replay later.
+- Transfer timing and confirmation timing diverge.
+- Inspection evidence can be incomplete at initial record time.
+- Projection updates can lag accepted events during transient failure states.
 
-Reconciliation is the control loop that turns drift into explicit, owned, auditable work.
+Reconciliation turns drift into explicit, owned, timestamped investigation and resolution work.
 
-## Why `event_log` Does Not Foreign-Key Every Reference
+## Why `event_log` Does Not Foreign-Key Forward-Created Entities
 
-`event_log` is the append-only source of truth. Some identifiers in an event refer to records that are created only after the event is accepted:
+`event_log` is the append-only source of truth.  
+Some events reference entities that are created only after event acceptance:
 
 - `asset_registered` creates `asset`
 - `transfer_initiated` creates `transfer_order`
 - `site_sync_started` creates `sync_batch`
 
-If `event_log` enforced foreign keys on those forward-created entities, valid events could not be written in correct order.
+If `event_log` enforced foreign keys on those forward-created entity IDs, valid events could not be ingested in correct causal order.
 
-For that reason:
+Therefore:
 
-- `event_log.site_id` keeps a foreign key (site must already exist)
-- `event_log.asset_id`, `event_log.transfer_order_id`, and `event_log.sync_batch_id` are indexed but not foreign-key constrained
+- `event_log.site_id` remains foreign-key constrained.
+- `event_log.asset_id`, `event_log.transfer_order_id`, and `event_log.sync_batch_id` remain indexed but unconstrained.
 
-This preserves ingestion correctness while keeping query performance and downstream integrity checks.
+This preserves causal ingestion order while retaining query performance and downstream integrity checks.
 
-## Monorepo Layout
+## Architecture Overview
 
-- `apps/api` Fastify API with Drizzle/PostgreSQL
-- `apps/web` Next.js operations workbench
-- `apps/simulator` deterministic sync/offline simulator
-- `packages/contracts` shared Zod request/event schemas
-- `packages/domain` projection and divergence rule logic
-- `packages/config` shared TypeScript config
-- `packages/ui` shared UI helpers
-- `docs` architecture/domain/event/sync/reconciliation/API docs + ADRs
-- `scripts` bootstrap utilities
+### System Context
 
-## Architecture Summary
+```mermaid
+flowchart LR
+  SiteA[Site NORTH] -->|Events| API
+  SiteB[Site CENTRAL] -->|Events| API
+  SiteC[Site COASTAL Offline Queue] -->|Sync Replay| API
+  Simulator -->|Scenario Traffic| API
+  API --> Ledger[(event_log)]
+  API --> Projection[(asset_projection)]
+  API --> Ops[(transfer/inspection/evidence/alerts/cases)]
+  Web[Operator Workbench] -->|Read + Actions| API
+```
 
-1. API validates and appends events to `event_log`.
-2. Event side effects update transfer, inspection, evidence, and sync tables.
-3. Projection reducer updates `asset_projection` deterministically by sequence.
-4. Divergence scanner evaluates rule set and writes alerts/cases.
-5. Operators review and resolve exceptions in the workbench.
+### Event Flow
 
-## Event Types
+```mermaid
+flowchart LR
+  Request[Incoming event] --> Validate[Schema validation]
+  Validate --> Dedupe{Duplicate source event?}
+  Dedupe -->|Yes| ReturnDedup[Return deduplicated acceptance]
+  Dedupe -->|No| Append[Append to event_log]
+  Append --> SideEffects[Apply side effects]
+  SideEffects --> Projection[Update asset_projection]
+  Projection --> Response[Return id + sequence]
+```
+
+### Projection Flow
+
+```mermaid
+flowchart TD
+  Event[event_log sequence N] --> Check{N > last_sequence?}
+  Check -->|No| Skip[No projection mutation]
+  Check -->|Yes| Reduce[Deterministic reducer]
+  Reduce --> Upsert[Upsert asset_projection]
+  Upsert --> State[Current projected state]
+```
+
+### Sync / Replay Flow
+
+```mermaid
+sequenceDiagram
+  participant Site
+  participant API
+  participant DB
+  Site->>API: POST /api/v1/sync/replay
+  API->>DB: append site_sync_started
+  loop queued events
+    API->>DB: dedupe by (site_id, source_site_event_id)
+    API->>DB: append + side effects + projection
+  end
+  API->>DB: append site_sync_completed
+  API-->>Site: accepted/rejected/deduplicated counts
+```
+
+### Reconciliation Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> AlertOpen: divergence_detected
+  AlertOpen --> CaseOpen: auto-open(high) or manual-open
+  CaseOpen --> Investigating: operator review
+  Investigating --> Resolved: resolve action
+  Resolved --> EventWritten: reconciliation_resolved appended
+  EventWritten --> [*]
+```
+
+## Domain Model Summary
+
+- **Site**: operational node that emits events and sync batches
+- **Asset**: serialized unit tracked across site custody
+- **Transfer Order**: directed movement request between sites
+- **Inspection / Evidence Metadata**: quality checks and linked proof metadata
+- **Alert**: machine-generated divergence signal
+- **Reconciliation Case**: operator-managed investigation and closure record
+
+See [docs/domain-model.md](docs/domain-model.md) for schema details.
+
+## Event Model Summary
+
+Supported events:
 
 - `asset_registered`
 - `asset_moved`
@@ -97,31 +224,33 @@ This preserves ingestion correctness while keeping query performance and downstr
 - `reconciliation_opened`
 - `reconciliation_resolved`
 
-## Operational Thresholds
+See [docs/event-model.md](docs/event-model.md) for validation and replay behavior.
 
-Default thresholds are configured through environment variables:
+## Alert vs Case vs Projection vs Accepted Event
 
-- `SYNC_STALE_MINUTES=45`: site sync is marked stale when no completion is recorded inside this window.
-- `TRANSFER_CONFIRMATION_HOURS=4`: initiated transfer is flagged when destination confirmation is overdue.
-- Missing evidence: an inspection with zero `evidence_metadata` rows is treated as an evidence gap.
+- **Accepted event**: immutable source-of-truth record in `event_log`
+- **Projection**: derived current-state view for fast operational reads
+- **Alert**: rule-based divergence detection output
+- **Case**: operator-owned reconciliation task that can resolve an alert
 
-These are intentionally generic defaults for public-safe demonstration and can be tuned per environment.
+## Monorepo Layout
 
-## Terminology
+- `apps/api` Fastify API + Drizzle + PostgreSQL migrations
+- `apps/web` Next.js operator workbench
+- `apps/simulator` deterministic replay/delay simulator
+- `packages/contracts` shared typed contracts and Zod schemas
+- `packages/domain` projection and divergence logic
+- `packages/config` shared TypeScript config
+- `packages/ui` shared UI helpers
+- `docs` architecture, domain, event, sync, reconciliation, ADRs
+- `scripts` bootstrap helpers
 
-- **Event stream**: append-only record of accepted operational events (`event_log`).
-- **Projection**: deterministic current-state materialization derived from event replay (`asset_projection`).
-- **Replay**: ingestion of queued site events after delayed connectivity.
-- **Sync batch**: grouped replay submission for a site, including accepted/rejected counts.
-- **Divergence**: detected mismatch between expected and observed operational state.
-- **Reconciliation case**: explicit operator workflow item opened to investigate and resolve divergence.
-
-## Local Run
+## Local Setup
 
 Prerequisites:
 
 - Docker + Docker Compose
-- Node.js 20+ (for local non-container scripts)
+- Node.js 20+
 
 ```bash
 cp .env.example .env
@@ -134,6 +263,7 @@ Endpoints:
 
 - Web: `http://localhost:3000`
 - API health: `http://localhost:4000/health`
+- Versioned API health: `http://localhost:4000/api/v1/health`
 - Dashboard API: `http://localhost:4000/api/v1/dashboard`
 
 ## Simulator
@@ -142,29 +272,65 @@ Endpoints:
 npm run start --workspace apps/simulator
 ```
 
-The simulator posts deterministic events, replays an offline queue with a sync batch, and triggers divergence scan.
+The simulator pushes deterministic events, replays an offline queue, and runs divergence scan.
 
-## Testing
+Scenario options:
+
+- `SIM_SCENARIO=healthy-movement npm run start --workspace apps/simulator`
+- `SIM_SCENARIO=sync-lag-divergence npm run start --workspace apps/simulator`
+
+## Deep Review Path
+
+1. Read [docs/architecture.md](docs/architecture.md) to understand event/projection/replay boundaries.
+2. Inspect `apps/api/src/domain/event-service.ts` for ingestion, idempotency, and side effects.
+3. Inspect `apps/api/src/domain/query-service.ts` for projection and operator-facing aggregation.
+4. Inspect `packages/domain/src/projection.ts` and `packages/domain/src/divergence.ts` for deterministic domain logic.
+5. Run seed and inspect UI detail pages (`assets`, `transfers`, `sync-batches`, `reconciliation`, `sites`).
+
+## What To Inspect First (Hiring Manager Path)
+
+1. `event_log` append-only model and replay handling
+2. Projection consistency signals (projection sequence vs accepted stream sequence)
+3. Divergence rules and resulting operator workflow
+4. Reconciliation resolution writing back to event stream
+5. Test coverage for idempotency and divergence detection
+
+## Test Depth (Visible Proof)
+
+Run:
 
 ```bash
 npm test
 npm run test:e2e
 ```
 
-- Unit tests: projection reducer and divergence rules
-- Integration tests: API route behavior and validation
-- E2E smoke test: main dashboard surface
+High-value tests include:
+
+- replay idempotency behavior
+- projection update correctness
+- stale-site detection
+- transfer confirmation overdue detection
+- inspection evidence-gap detection
+- reconciliation resolution event behavior
+
+## Design Tradeoffs
+
+- **Append-only ledger + derived projection** over mutable history rows:
+  stronger auditability and replay semantics at the cost of additional query shaping.
+- **Single relational database** over distributed infrastructure:
+  keeps the reference implementation deterministic and inspectable while still modeling drift.
+- **Explicit rule-based divergence detection** over opaque scoring:
+  easier operator reasoning and safer public demonstration.
+- **Operator-focused UI** over marketing-style dashboard:
+  prioritizes investigation workflows, timelines, and state explanation.
+- **Indexed but non-FK entity references in `event_log`** for forward-created entities:
+  preserves causal ingest order while retaining efficient query paths for assets, transfers, and sync batches.
 
 ## Non-Goals
 
-- Production auth and tenancy implementation
+- Production auth/authorization and multi-tenant isolation
+- Real evidence file storage integration
 - Proprietary workflow replication
-- Real evidence/object storage integration
 - Full distributed infrastructure orchestration
 
-## Design Priorities
-
-- Clarity over clever abstraction
-- Determinism over hidden behavior
-- Auditability over mutable shortcuts
-- Operational readability over visual flourish
+See [docs/non-goals-and-safety-boundaries.md](docs/non-goals-and-safety-boundaries.md).

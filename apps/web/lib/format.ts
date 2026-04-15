@@ -10,6 +10,7 @@ const labelOverrides: Record<string, string> = {
   resolved: "Resolved",
   healthy: "Healthy",
   stale: "Stale",
+  degraded: "Degraded",
   pass: "Pass",
   fail: "Fail",
   review: "Review",
@@ -98,4 +99,58 @@ export function shortId(value: string | null | undefined, size = 8): string {
     return "-";
   }
   return value.length > size ? `${value.slice(0, size)}...` : value;
+}
+
+function asText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+export function summarizeEventPayload(
+  eventType: string,
+  payload: Record<string, unknown> | null | undefined
+): string {
+  if (!payload) {
+    return "-";
+  }
+
+  switch (eventType) {
+    case "asset_registered":
+      return `Serial ${asText(payload.serialNumber) || "unknown"} registered`;
+    case "asset_moved":
+      return `Moved ${shortId(asText(payload.fromSiteId), 6)} -> ${shortId(asText(payload.toSiteId), 6)}`;
+    case "asset_received":
+      return `Received (${asText(payload.condition) || "unknown"})`;
+    case "inspection_recorded":
+      return `Inspection ${asText(payload.status) || "recorded"}`;
+    case "evidence_attached":
+      return `Evidence ${asText(payload.mimeType) || "attached"}`;
+    case "transfer_initiated":
+      return `Transfer to ${shortId(asText(payload.destinationSiteId), 6)} initiated`;
+    case "transfer_completed":
+      return "Transfer completed";
+    case "site_sync_started":
+      return `Replay started (${asText(payload.queuedEventCount) || "0"} queued)`;
+    case "site_sync_completed":
+      return `Replay completed (${asText(payload.acceptedEventCount) || "0"} accepted, ${asText(payload.rejectedEventCount) || "0"} rejected)`;
+    case "divergence_detected":
+      return asText(payload.summary) || "Divergence detected";
+    case "reconciliation_opened":
+      return `Case ${shortId(asText(payload.caseId), 8)} opened`;
+    case "reconciliation_resolved":
+      return `Case ${shortId(asText(payload.caseId), 8)} resolved`;
+    default: {
+      const keys = Object.keys(payload);
+      if (keys.length === 0) {
+        return "-";
+      }
+      const firstKey = keys[0];
+      return `${formatCodeLabel(firstKey)}: ${asText(payload[firstKey]) || "..."}`;
+    }
+  }
 }

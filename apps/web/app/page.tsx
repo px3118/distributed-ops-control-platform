@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { StatusBadge } from "../components/status-badge";
 import { fetchJson } from "../lib/api";
-import { formatCodeLabel, formatTimestampWithAge, shortId } from "../lib/format";
+import { formatCodeLabel, formatTimestampWithAge } from "../lib/format";
 
 type DashboardResponse = {
   data: {
@@ -20,6 +20,16 @@ type DashboardResponse = {
   };
 };
 
+type SitesResponse = {
+  data: Array<{
+    id: string;
+    code: string;
+    syncHealth: "healthy" | "stale";
+    syncPosture: "healthy" | "stale" | "degraded";
+    lastSyncCompletedAt: string | null;
+  }>;
+};
+
 const metrics = [
   { key: "openReconciliationCases", label: "Open Reconciliation Cases", href: "/reconciliation" },
   { key: "staleSites", label: "Sites With Stale Sync", href: "/sites" },
@@ -30,91 +40,342 @@ const metrics = [
   { key: "unresolvedEvidenceGaps", label: "Inspections With Evidence Gaps", href: "/assets" }
 ] as const;
 
+type StatusTone = "healthy" | "warning" | "critical";
+
 export default async function HomePage() {
-  const dashboard = await fetchJson<DashboardResponse>("/dashboard");
+  const [dashboard, sites] = await Promise.all([
+    fetchJson<DashboardResponse>("/dashboard"),
+    fetchJson<SitesResponse>("/sites")
+  ]);
+
   const snapshotAt = new Date().toISOString();
+  const scenarioLabel =
+    process.env.NEXT_PUBLIC_SCENARIO_LABEL ??
+    "sync lag + conflicting observations + missing evidence";
+  const syncStaleMinutes = process.env.NEXT_PUBLIC_SYNC_STALE_MINUTES ?? "45";
+  const transferConfirmationHours = process.env.NEXT_PUBLIC_TRANSFER_CONFIRMATION_HOURS ?? "4";
+
+  const healthySites = sites.data.filter((site) => site.syncPosture === "healthy").length;
+  const degradedSites = sites.data.filter((site) => site.syncPosture === "degraded").length;
+  const staleSites = sites.data.filter((site) => site.syncPosture === "stale").length;
+  const lastReplayAt = dashboard.data.recentSyncBatches[0]?.startedAt as string | undefined;
+
+  const recentAlerts = dashboard.data.recentAlerts as Array<{
+    severity?: string;
+    detectedAt?: string;
+  }>;
+  const recentTransfers = dashboard.data.recentTransfers as Array<{
+    status?: string;
+  }>;
+
+  const highAlerts = recentAlerts.filter((alert) => String(alert.severity ?? "") === "high").length;
+  const mediumAlerts = recentAlerts.filter((alert) => String(alert.severity ?? "") === "medium").length;
+  const lowAlerts = recentAlerts.filter((alert) => String(alert.severity ?? "") === "low").length;
+  const initiatedTransfers = recentTransfers.filter(
+    (transfer) => String(transfer.status ?? "") === "initiated"
+  ).length;
+  const completedTransfers = recentTransfers.filter(
+    (transfer) => String(transfer.status ?? "") === "completed"
+  ).length;
+
+  const totalPosture = Math.max(1, healthySites + degradedSites + staleSites);
+  const replayAccepted = dashboard.data.summary.replaySuccessCount;
+  const replayRejected = dashboard.data.summary.replayFailureCount;
+  const replayTotal = Math.max(1, replayAccepted + replayRejected);
+
+  const globalStatus: { label: string; detail: string; tone: StatusTone } =
+    staleSites > 0 || highAlerts > 0 || replayRejected > 0
+      ? {
+          label: "Attention Required",
+          detail: "One or more sites are stale or high-severity alerts are active.",
+          tone: "critical"
+        }
+      : degradedSites > 0 || mediumAlerts > 0
+        ? {
+            label: "Monitor",
+            detail: "System is operating with moderate risk signals that should be watched.",
+            tone: "warning"
+          }
+        : {
+            label: "Stable",
+            detail: "No active stale-site or high-severity risk conditions detected.",
+            tone: "healthy"
+          };
+
+  const globalStatusClass = {
+    healthy: "border-success/60 bg-success/10 text-success",
+    warning: "border-warning/60 bg-warning/10 text-warning",
+    critical: "border-critical/60 bg-critical/10 text-critical"
+  }[globalStatus.tone];
+
+  const postureSegments = [
+    {
+      key: "healthy",
+      label: "Healthy",
+      count: healthySites,
+      widthPct: (healthySites / totalPosture) * 100,
+      barClass: "bg-success/80"
+    },
+    {
+      key: "degraded",
+      label: "Degraded",
+      count: degradedSites,
+      widthPct: (degradedSites / totalPosture) * 100,
+      barClass: "bg-warning/80"
+    },
+    {
+      key: "stale",
+      label: "Stale",
+      count: staleSites,
+      widthPct: (staleSites / totalPosture) * 100,
+      barClass: "bg-critical/80"
+    }
+  ];
+
+  const alertMixBars = [
+    { label: "High", value: highAlerts, className: "bg-critical/80" },
+    { label: "Medium", value: mediumAlerts, className: "bg-warning/80" },
+    { label: "Low", value: lowAlerts, className: "bg-sky-500/80" }
+  ];
+  const maxAlertBarValue = Math.max(1, ...alertMixBars.map((bar) => bar.value));
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border border-line bg-panel px-4 py-2">
-        <p className="text-xs text-fgMuted">Snapshot time {formatTimestampWithAge(snapshotAt)}</p>
+      <section className="grid items-stretch gap-4 lg:grid-cols-[22rem_minmax(0,1fr)_20rem]">
+        <article className="app-card h-full">
+          <h2 className="app-section-title">Operational Policy</h2>
+          <p className="app-section-subtitle">As of {formatTimestampWithAge(snapshotAt)}</p>
+          <div className="mt-3 space-y-1 text-sm text-fgMuted">
+            <p>
+              Site is stale after <span className="font-semibold text-fg">{syncStaleMinutes} minutes</span>{" "}
+              without completed sync.
+            </p>
+            <p>
+              Transfer is overdue after{" "}
+              <span className="font-semibold text-fg">{transferConfirmationHours} hours</span>{" "}
+              without confirmation.
+            </p>
+          </div>
+        </article>
+
+        <article className="app-card h-full">
+          <h2 className="app-section-title">Scenario State</h2>
+          <p className="mt-1 text-base">
+            Scenario: <span className="font-medium">{scenarioLabel}</span>
+          </p>
+          <p className="mt-1 text-sm text-fgMuted">
+            Site sync status: {healthySites} healthy, {degradedSites} degraded, {staleSites} stale.
+            Last replay batch observed {formatTimestampWithAge(lastReplayAt ?? null, "Not observed")}.
+          </p>
+        </article>
+
+        <article className="app-card h-full">
+          <h2 className="app-section-title">Global Status</h2>
+          <div className={`mt-3 rounded-lg border px-3 py-2 text-sm font-semibold ${globalStatusClass}`}>
+            {globalStatus.label}
+          </div>
+          <p className="mt-2 text-sm text-fgMuted">{globalStatus.detail}</p>
+        </article>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {metrics.map((metric) => (
-          <Link key={metric.key} href={metric.href} className="rounded-lg border border-line bg-panel p-4 transition-colors hover:bg-panelMuted/50">
-            <article>
-              <h2 className="text-sm text-fgMuted">{metric.label}</h2>
-              <p className="mt-2 text-2xl font-semibold">{dashboard.data.summary[metric.key]}</p>
-            </article>
-          </Link>
-        ))}
+      <section className="grid items-stretch gap-4 xl:grid-cols-3">
+        <article className="app-card h-full">
+          <h2 className="app-section-title">Site Sync Status</h2>
+          <p className="app-section-subtitle">
+            Current distribution across healthy, degraded, and stale sites.
+          </p>
+          <div className="mt-4 flex h-3 w-full overflow-hidden rounded-full border border-line bg-panelMuted">
+            {postureSegments.map((segment) => (
+              <div
+                key={segment.key}
+                className={segment.barClass}
+                style={{ width: `${segment.widthPct}%` }}
+                title={`${segment.label}: ${segment.count}`}
+              />
+            ))}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+            {postureSegments.map((segment) => (
+              <div key={segment.key} className="rounded border border-line bg-panelMuted px-2 py-1.5">
+                <div className="text-fgMuted">{segment.label}</div>
+                <div className="text-base font-semibold text-fg">{segment.count}</div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="app-card h-full">
+          <h2 className="app-section-title">Alert Severity Mix</h2>
+          <p className="app-section-subtitle">Breakdown of recent alerts by severity.</p>
+          <div className="mt-4 space-y-3">
+            {alertMixBars.map((bar) => (
+              <div key={bar.label} className="space-y-1">
+                <div className="flex items-center justify-between text-xs text-fgMuted">
+                  <span>{bar.label}</span>
+                  <span className="font-semibold text-fg">{bar.value}</span>
+                </div>
+                <div className="h-2 rounded-full border border-line bg-panelMuted">
+                  <div
+                    className={`h-full rounded-full ${bar.className}`}
+                    style={{ width: `${Math.max(8, (bar.value / maxAlertBarValue) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="app-card h-full">
+          <h2 className="app-section-title">Replay & Transfer Flow</h2>
+          <p className="app-section-subtitle">Recent replay outcomes and transfer completion mix.</p>
+          <div className="mt-4 space-y-4">
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-fgMuted">
+                <span>Replay acceptance</span>
+                <span className="font-semibold text-fg">
+                  {replayAccepted} accepted / {replayRejected} rejected
+                </span>
+              </div>
+              <div className="flex h-2 w-full overflow-hidden rounded-full border border-line bg-panelMuted">
+                <div className="bg-success/80" style={{ width: `${(replayAccepted / replayTotal) * 100}%` }} />
+                <div className="bg-critical/80" style={{ width: `${(replayRejected / replayTotal) * 100}%` }} />
+              </div>
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between text-xs text-fgMuted">
+                <span>Transfer completion</span>
+                <span className="font-semibold text-fg">
+                  {completedTransfers} completed / {initiatedTransfers} pending
+                </span>
+              </div>
+              <div className="flex h-2 w-full overflow-hidden rounded-full border border-line bg-panelMuted">
+                <div
+                  className="bg-success/80"
+                  style={{
+                    width: `${(completedTransfers / Math.max(1, completedTransfers + initiatedTransfers)) * 100}%`
+                  }}
+                />
+                <div
+                  className="bg-warning/80"
+                  style={{
+                    width: `${(initiatedTransfers / Math.max(1, completedTransfers + initiatedTransfers)) * 100}%`
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section className="space-y-3">
+        <header className="app-card py-3">
+          <h2 className="app-section-title">Operational Summary</h2>
+          <p className="app-section-subtitle">
+            Current counts for risk, synchronization, and in-transit operations.
+          </p>
+        </header>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {metrics.map((metric) => (
+            <Link key={metric.key} href={metric.href} className="app-kpi-card">
+              <article>
+                <h3 className="text-sm font-semibold text-fg">{metric.label}</h3>
+                <p className="mt-2 text-4xl font-semibold tracking-tight">
+                  {dashboard.data.summary[metric.key]}
+                </p>
+              </article>
+            </Link>
+          ))}
+        </div>
       </section>
 
       <section className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-fgMuted">Recent Transfers</h3>
-          <p className="mb-3 text-xs text-fgMuted">Recent transfer orders and confirmation state at destination.</p>
-          <div className="space-y-2 text-sm">
+        <div className="app-card">
+          <h3 className="app-section-title">Recent Transfers</h3>
+          <p className="app-section-subtitle">Latest transfer orders and confirmation state at destination.</p>
+          <div className="app-scroll-panel mt-3 space-y-2 text-sm">
             {dashboard.data.recentTransfers.map((transfer) => (
-              <div key={String(transfer.id)} className="rounded border border-line bg-panelMuted p-2">
+              <div key={String(transfer.id)} className="app-stream-card">
                 <div className="flex items-center justify-between">
-                  <div className="font-mono text-xs text-fgMuted" title={String(transfer.id)}>
-                    {shortId(String(transfer.id), 10)}
+                  <div className="break-all font-mono text-xs text-fg" title={String(transfer.id)}>
+                    Transfer {String(transfer.id)}
                   </div>
                   <StatusBadge value={String(transfer.status)} />
                 </div>
-                <div className="mt-1 text-xs text-fgMuted">
+                <div className="mt-2 text-xs text-fgMuted">
                   Initiated {formatTimestampWithAge(String(transfer.initiatedAt ?? ""))}
                 </div>
                 <div className="mt-1 text-xs text-fgMuted">
-                  Confirmed {formatTimestampWithAge((transfer.completedAt as string | null | undefined) ?? null, "Pending")}
+                  Confirmed{" "}
+                  {formatTimestampWithAge(
+                    (transfer.completedAt as string | null | undefined) ?? null,
+                    "Pending"
+                  )}
                 </div>
+                <Link href={`/transfers/${String(transfer.id)}`} className="app-pill-action mt-2 inline-flex">
+                  Open detail
+                </Link>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-fgMuted">Recent Alerts</h3>
-          <p className="mb-3 text-xs text-fgMuted">Latest divergence conditions requiring operator review.</p>
-          <div className="space-y-2 text-sm">
+        <div className="app-card">
+          <h3 className="app-section-title">Recent Alerts</h3>
+          <p className="app-section-subtitle">Divergence conditions that require operator review.</p>
+          <div className="app-scroll-panel mt-3 space-y-2 text-sm">
             {dashboard.data.recentAlerts.map((alert) => (
-              <div key={String(alert.id)} className="rounded border border-line bg-panelMuted p-2">
+              <div key={String(alert.id)} className="app-stream-card">
                 <div className="flex items-center justify-between">
-                  <div>{formatCodeLabel(String(alert.ruleCode))}</div>
+                  <div className="font-semibold text-fg">{String(alert.summary)}</div>
                   <StatusBadge value={String(alert.severity)} />
                 </div>
-                <div className="text-fgMuted">{String(alert.summary)}</div>
+                <div className="mt-1 text-xs text-fgMuted">Rule: {formatCodeLabel(String(alert.ruleCode))}</div>
                 <div className="mt-1 text-xs text-fgMuted">
                   Detected {formatTimestampWithAge(String(alert.detectedAt ?? ""))}
                 </div>
+                <Link
+                  href={`/reconciliation?q=${encodeURIComponent(String(alert.id))}`}
+                  className="app-pill-action mt-2 inline-flex"
+                >
+                  Open Detail
+                </Link>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-lg border border-line bg-panel p-4">
-          <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-fgMuted">Recent Sync Batches</h3>
-          <p className="mb-3 text-xs text-fgMuted">Replay outcomes from recent site synchronization batches.</p>
-          <div className="space-y-2 text-sm">
+        <div className="app-card">
+          <h3 className="app-section-title">Recent Sync Batches</h3>
+          <p className="app-section-subtitle">Replay outcomes from recent site synchronization batches.</p>
+          <div className="app-scroll-panel mt-3 space-y-2 text-sm">
             {dashboard.data.recentSyncBatches.map((batch) => (
-              <div key={String(batch.id)} className="rounded border border-line bg-panelMuted p-2">
-                <div className="font-mono text-xs text-fgMuted" title={String(batch.id)}>
-                  {shortId(String(batch.id), 10)}
-                </div>
-                <div className="mt-1 flex items-center justify-between">
+              <div key={String(batch.id)} className="app-stream-card">
+                <div className="flex items-center justify-between">
+                  <div className="break-all font-mono text-xs text-fg" title={String(batch.id)}>
+                    Batch {String(batch.id)}
+                  </div>
                   <StatusBadge value={String(batch.status)} />
-                  <span className="text-xs text-fgMuted">
-                    accepted {String(batch.acceptedEventCount)} rejected {String(batch.rejectedEventCount)}
-                  </span>
+                </div>
+                <div className="mt-1 text-xs text-fgMuted">
+                  Replay outcome: accepted {String(batch.acceptedEventCount)}, rejected{" "}
+                  {String(batch.rejectedEventCount)}
                 </div>
                 <div className="mt-1 text-xs text-fgMuted">
                   Started {formatTimestampWithAge(String(batch.startedAt ?? ""))}
                 </div>
                 <div className="mt-1 text-xs text-fgMuted">
-                  Completed {formatTimestampWithAge((batch.completedAt as string | null | undefined) ?? null, "In Progress")}
+                  Completed{" "}
+                  {formatTimestampWithAge(
+                    (batch.completedAt as string | null | undefined) ?? null,
+                    "In Progress"
+                  )}
                 </div>
+                <Link
+                  href={`/sync-batches/${String(batch.id)}`}
+                  className="app-pill-action mt-2 inline-flex"
+                >
+                  Open Detail
+                </Link>
               </div>
             ))}
           </div>

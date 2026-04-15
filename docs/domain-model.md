@@ -94,3 +94,9 @@ erDiagram
   alert ||--o{ reconciliation_case : drives
   asset ||--o{ reconciliation_case : involves
 ```
+
+## Non-Goals
+
+- Not a full enterprise master-data model.
+- Not a complete ERP or fulfillment schema.
+- Not a proprietary schema mirror from prior systems.

@@ -13,6 +13,16 @@ const ASSET_IDS = {
   assetE: "37adf48f-f6dd-44fb-8f93-9f34af297d6d"
 } as const;
 
+type ScenarioName = "healthy-movement" | "sync-lag-divergence";
+
+type ScenarioDefinition = {
+  name: ScenarioName;
+  description: string;
+  onlineEvents: CreateEventRequest[];
+  offlineReplayBatchId?: string;
+  offlineEvents?: CreateEventRequest[];
+};
+
 async function post(path: string, payload: unknown): Promise<unknown> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
@@ -30,113 +40,184 @@ async function post(path: string, payload: unknown): Promise<unknown> {
   return response.json();
 }
 
+function resolveScenarioName(): ScenarioName {
+  const argValue = process.argv.find((value) => value.startsWith("--scenario="));
+  const fromArg = argValue?.split("=")[1];
+  const fromEnv = process.env.SIM_SCENARIO;
+  const raw = (fromArg ?? fromEnv ?? "sync-lag-divergence").trim();
+
+  if (raw === "healthy-movement" || raw === "sync-lag-divergence") {
+    return raw;
+  }
+  return "sync-lag-divergence";
+}
+
+function buildScenarios(now: number): Record<ScenarioName, ScenarioDefinition> {
+  const iso = (minutesAgo: number): string =>
+    new Date(now - 1000 * 60 * minutesAgo).toISOString();
+
+  return {
+    "healthy-movement": {
+      name: "healthy-movement",
+      description: "End-to-end transfer completion with inspection evidence and no replay errors.",
+      onlineEvents: [
+        {
+          eventType: "asset_registered",
+          assetId: ASSET_IDS.assetD,
+          siteId: SITE_IDS.north,
+          transferOrderId: null,
+          occurredAt: iso(30),
+          sourceSiteEventId: "sim-healthy-asset-d-registered",
+          payload: {
+            serialNumber: "SN-OPS-2001",
+            containerId: "CNT-D2",
+            registeredBy: "sim-operator"
+          }
+        },
+        {
+          eventType: "transfer_initiated",
+          assetId: ASSET_IDS.assetD,
+          siteId: SITE_IDS.north,
+          transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
+          occurredAt: iso(25),
+          sourceSiteEventId: "sim-healthy-transfer-init",
+          payload: {
+            transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
+            originSiteId: SITE_IDS.north,
+            destinationSiteId: SITE_IDS.coastal,
+            initiatedBy: "north-shift-a"
+          }
+        },
+        {
+          eventType: "asset_moved",
+          assetId: ASSET_IDS.assetD,
+          siteId: SITE_IDS.north,
+          transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
+          occurredAt: iso(24),
+          sourceSiteEventId: "sim-healthy-transfer-moved",
+          payload: {
+            fromSiteId: SITE_IDS.north,
+            toSiteId: SITE_IDS.coastal,
+            reason: "Scheduled movement"
+          }
+        },
+        {
+          eventType: "asset_received",
+          assetId: ASSET_IDS.assetD,
+          siteId: SITE_IDS.coastal,
+          transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
+          occurredAt: iso(20),
+          sourceSiteEventId: "sim-healthy-transfer-received",
+          payload: {
+            fromSiteId: SITE_IDS.north,
+            condition: "ok",
+            receivedBy: "coastal-shift-c"
+          }
+        },
+        {
+          eventType: "transfer_completed",
+          assetId: ASSET_IDS.assetD,
+          siteId: SITE_IDS.coastal,
+          transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
+          occurredAt: iso(18),
+          sourceSiteEventId: "sim-healthy-transfer-complete",
+          payload: {
+            transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
+            completedBy: "coastal-shift-c",
+            completionNote: "Arrival confirmed"
+          }
+        }
+      ]
+    },
+    "sync-lag-divergence": {
+      name: "sync-lag-divergence",
+      description:
+        "Mixed online/offline flow with replay submission and divergence scan for operational drift.",
+      onlineEvents: [
+        {
+          eventType: "asset_registered",
+          assetId: ASSET_IDS.assetE,
+          siteId: SITE_IDS.central,
+          transferOrderId: null,
+          occurredAt: iso(30),
+          sourceSiteEventId: "sim-drift-asset-e-registered",
+          payload: {
+            serialNumber: "SN-OPS-2002",
+            containerId: "CNT-E2",
+            registeredBy: "sim-operator"
+          }
+        },
+        {
+          eventType: "inspection_recorded",
+          assetId: ASSET_IDS.assetE,
+          siteId: SITE_IDS.central,
+          transferOrderId: null,
+          occurredAt: iso(24),
+          sourceSiteEventId: "sim-drift-inspection-e",
+          payload: {
+            inspectionId: "de55347f-a98b-44a0-9988-eb0d3e4f1985",
+            status: "review",
+            notes: "Evidence pending while site queue is delayed."
+          }
+        }
+      ],
+      offlineReplayBatchId: "af8a07a4-a71b-4a55-9c0f-5060cf149318",
+      offlineEvents: [
+        {
+          eventType: "asset_received",
+          assetId: ASSET_IDS.assetE,
+          siteId: SITE_IDS.coastal,
+          transferOrderId: null,
+          occurredAt: iso(10),
+          sourceSiteEventId: "sim-drift-offline-received-e",
+          payload: {
+            fromSiteId: SITE_IDS.central,
+            condition: "ok",
+            receivedBy: "coastal-shift-c"
+          }
+        },
+        {
+          eventType: "inspection_recorded",
+          assetId: ASSET_IDS.assetE,
+          siteId: SITE_IDS.coastal,
+          transferOrderId: null,
+          occurredAt: iso(9),
+          sourceSiteEventId: "sim-drift-offline-inspection-e",
+          payload: {
+            inspectionId: "314c5a28-fac0-4c54-bd91-0cd22f5668a2",
+            status: "review",
+            notes: "Offline inspection replayed."
+          }
+        }
+      ]
+    }
+  };
+}
+
 async function run(): Promise<void> {
   const now = Date.now();
-
-  const deterministicEvents: CreateEventRequest[] = [
-    {
-      eventType: "asset_registered",
-      assetId: ASSET_IDS.assetD,
-      siteId: SITE_IDS.north,
-      transferOrderId: null,
-      occurredAt: new Date(now - 1000 * 60 * 30).toISOString(),
-      sourceSiteEventId: "sim-asset-d-registered",
-      payload: {
-        serialNumber: "SN-OPS-2001",
-        containerId: "CNT-D2",
-        registeredBy: "sim-operator"
-      }
-    },
-    {
-      eventType: "transfer_initiated",
-      assetId: ASSET_IDS.assetD,
-      siteId: SITE_IDS.north,
-      transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
-      occurredAt: new Date(now - 1000 * 60 * 25).toISOString(),
-      sourceSiteEventId: "sim-transfer-d-init",
-      payload: {
-        transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
-        originSiteId: SITE_IDS.north,
-        destinationSiteId: SITE_IDS.coastal,
-        initiatedBy: "north-shift-a"
-      }
-    },
-    {
-      eventType: "asset_moved",
-      assetId: ASSET_IDS.assetD,
-      siteId: SITE_IDS.north,
-      transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
-      occurredAt: new Date(now - 1000 * 60 * 24).toISOString(),
-      sourceSiteEventId: "sim-transfer-d-moved",
-      payload: {
-        fromSiteId: SITE_IDS.north,
-        toSiteId: SITE_IDS.coastal,
-        reason: "scheduled movement"
-      }
-    },
-    {
-      eventType: "asset_registered",
-      assetId: ASSET_IDS.assetE,
-      siteId: SITE_IDS.central,
-      transferOrderId: null,
-      occurredAt: new Date(now - 1000 * 60 * 20).toISOString(),
-      sourceSiteEventId: "sim-asset-e-registered",
-      payload: {
-        serialNumber: "SN-OPS-2002",
-        containerId: "CNT-E2",
-        registeredBy: "sim-operator"
-      }
-    }
-  ];
+  const scenarioName = resolveScenarioName();
+  const scenarios = buildScenarios(now);
+  const scenario = scenarios[scenarioName];
 
   // eslint-disable-next-line no-console
-  console.log("Submitting online site events...");
-  for (const event of deterministicEvents) {
+  console.log(`Running simulator scenario: ${scenario.name}`);
+  // eslint-disable-next-line no-console
+  console.log(scenario.description);
+
+  for (const event of scenario.onlineEvents) {
     await post("/events", event);
   }
 
-  // Simulate coastal site offline queue.
-  const offlineQueue: CreateEventRequest[] = [
-    {
-      eventType: "asset_received",
-      assetId: ASSET_IDS.assetD,
+  if (scenario.offlineReplayBatchId && scenario.offlineEvents && scenario.offlineEvents.length > 0) {
+    await post("/sync/replay", {
       siteId: SITE_IDS.coastal,
-      transferOrderId: "5d85d84f-3875-4774-a3f8-7bc5b3944c66",
-      occurredAt: new Date(now - 1000 * 60 * 10).toISOString(),
-      sourceSiteEventId: "sim-offline-received-d",
-      payload: {
-        fromSiteId: SITE_IDS.north,
-        condition: "ok",
-        receivedBy: "coastal-shift-c"
-      }
-    },
-    {
-      eventType: "inspection_recorded",
-      assetId: ASSET_IDS.assetD,
-      siteId: SITE_IDS.coastal,
-      transferOrderId: null,
-      occurredAt: new Date(now - 1000 * 60 * 9).toISOString(),
-      sourceSiteEventId: "sim-offline-inspection-d",
-      payload: {
-        inspectionId: "de55347f-a98b-44a0-9988-eb0d3e4f1985",
-        status: "review",
-        notes: "Physical marking mismatch noted; follow-up evidence required"
-      }
-    }
-  ];
+      syncBatchId: scenario.offlineReplayBatchId,
+      events: scenario.offlineEvents
+    });
+  }
 
-  // eslint-disable-next-line no-console
-  console.log("Replaying offline queue via sync batch...");
-  await post("/sync/replay", {
-    siteId: SITE_IDS.coastal,
-    syncBatchId: "af8a07a4-a71b-4a55-9c0f-5060cf149318",
-    events: offlineQueue
-  });
-
-  // eslint-disable-next-line no-console
-  console.log("Running divergence scan...");
   const divergence = await post("/divergence/scan", {});
-
   // eslint-disable-next-line no-console
   console.log("Simulation completed", divergence);
 }

@@ -42,3 +42,18 @@ sequenceDiagram
   API->>DB: update sync_batch counters
   API-->>Site: replay outcome
 ```
+
+## Replay Outcome Model
+
+- `queued_event_count`: events submitted by the site.
+- `accepted_event_count`: events accepted into processing, including deduplicated replays.
+- `rejected_event_count`: events rejected due to validation or side-effect failures.
+- `deduplicated_event_count`: accepted events that matched an existing `(site_id, source_site_event_id)`.
+
+These values are visible in `sync_batch` and surfaced in the sync batch detail view.
+
+## Non-Goals
+
+- Not a production message bus or distributed log implementation.
+- Not guaranteed real-time synchronization across all sites.
+- Not a proprietary replication algorithm clone.

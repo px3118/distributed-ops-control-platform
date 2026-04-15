@@ -13,4 +13,4 @@ COPY . .
 RUN npm run build --workspace packages/ui && npm run build --workspace apps/web
 WORKDIR /workspace/apps/web
 EXPOSE 3000
-CMD ["node", ".next/standalone/apps/web/server.js"]
+CMD ["npm", "run", "start"]

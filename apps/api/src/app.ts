@@ -48,6 +48,35 @@ export function buildServer() {
       return;
     }
 
+    const validationError = error as {
+      code?: string;
+      statusCode?: number;
+      validation?: unknown;
+      message: string;
+    };
+
+    if (
+      validationError.code === "FST_ERR_VALIDATION" ||
+      (validationError.statusCode === 400 && Array.isArray(validationError.validation))
+    ) {
+      request.log.warn(
+        {
+          err: error,
+          validation: validationError.validation ?? null
+        },
+        "API request validation error"
+      );
+      reply.status(400).send({
+        error: {
+          message: validationError.message,
+          details: {
+            validation: validationError.validation ?? null
+          }
+        }
+      });
+      return;
+    }
+
     request.log.error({ err: error }, "Unhandled API error");
     reply.status(500).send({
       error: {

@@ -25,6 +25,49 @@ flowchart LR
   Simulator -->|Replay + Scan| API
 ```
 
+## Event Ingestion and Projection Flow
+
+```mermaid
+flowchart LR
+  Inbound[Inbound Event] --> Validate[Validate Envelope + Payload]
+  Validate --> Dedupe{Duplicate source event?}
+  Dedupe -->|Yes| ReturnDedup[Return deduplicated acceptance]
+  Dedupe -->|No| Append[Append event_log]
+  Append --> SideEffects[Apply side effects]
+  SideEffects --> Reduce[Projection reducer]
+  Reduce --> Projection[(asset_projection)]
+```
+
+## Sync Replay Flow
+
+```mermaid
+sequenceDiagram
+  participant Site
+  participant API
+  participant DB
+  Site->>API: POST /api/v1/sync/replay
+  API->>DB: append site_sync_started
+  loop queued events
+    API->>DB: dedupe by (site_id, source_site_event_id)
+    API->>DB: append accepted event_log rows
+    API->>DB: side effects + projection updates
+  end
+  API->>DB: append site_sync_completed
+  API-->>Site: accepted/rejected/deduplicated counts
+```
+
+## Reconciliation Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> AlertOpen: divergence_detected
+  AlertOpen --> CaseOpen: auto-open(high) or manual-open
+  CaseOpen --> Investigating: operator analysis
+  Investigating --> Resolved: resolve action submitted
+  Resolved --> EventWritten: reconciliation_resolved appended
+  EventWritten --> [*]
+```
+
 ## Internal API Architecture
 
 - Route layer: versioned endpoints and request validation
@@ -58,3 +101,9 @@ flowchart LR
 - idempotent replay using source event dedupe keys
 - explicit rule-based divergence detection
 - reconciliation workflow visibility
+
+## Non-Goals
+
+- Not a production authorization or tenancy model.
+- Not a full distributed infrastructure deployment topology.
+- Not a clone of any protected internal architecture.

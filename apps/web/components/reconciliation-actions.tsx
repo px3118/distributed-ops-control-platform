@@ -9,7 +9,7 @@ export function ReconciliationActions({
   caseId: string;
   defaultOperator: string;
 }) {
-  const [resolutionSummary, setResolutionSummary] = useState("Projection aligned after review.");
+  const [resolutionSummary, setResolutionSummary] = useState("Projection aligned after replay review.");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function resolveCase() {
@@ -28,20 +28,20 @@ export function ReconciliationActions({
   }
 
   return (
-    <div className="grid min-w-[22rem] gap-2 md:grid-cols-[minmax(18rem,1fr)_auto] md:items-start">
+    <div className="grid min-w-[13rem] gap-1.5 lg:grid-cols-[minmax(11rem,1fr)_auto] lg:items-start">
       <textarea
         aria-label="Resolution summary"
         rows={2}
-        className="w-full rounded border border-line bg-slate-900 px-2 py-1 text-xs"
+        className="app-textarea w-full text-xs leading-5"
         value={resolutionSummary}
         onChange={(event) => setResolutionSummary(event.target.value)}
       />
       <button
-        className="rounded border border-line bg-slate-800 px-2 py-1 text-xs md:self-start"
+        className="app-button px-2 py-1 text-xs lg:self-start"
         onClick={resolveCase}
         disabled={isSubmitting}
       >
-        {isSubmitting ? "Resolving..." : "Resolve Case"}
+        {isSubmitting ? "Resolving..." : "Resolve"}
       </button>
     </div>
   );

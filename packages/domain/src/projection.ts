@@ -34,6 +34,10 @@ export function applyEventToProjection(
   previous: AssetProjection | null,
   event: DomainEvent
 ): AssetProjection | null {
+  if (["site_sync_started", "site_sync_completed", "reconciliation_opened"].includes(event.eventType)) {
+    return previous;
+  }
+
   if (!event.assetId) {
     return previous;
   }

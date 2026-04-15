@@ -79,7 +79,9 @@ export const syncStartedPayloadSchema = z.object({
 export const syncCompletedPayloadSchema = z.object({
   syncBatchId: z.string().uuid(),
   acceptedEventCount: z.number().int().nonnegative(),
-  rejectedEventCount: z.number().int().nonnegative()
+  rejectedEventCount: z.number().int().nonnegative(),
+  deduplicatedEventCount: z.number().int().nonnegative().optional(),
+  rejectionReasons: z.array(z.string().min(3)).optional()
 });
 
 export const divergenceDetectedPayloadSchema = z.object({
